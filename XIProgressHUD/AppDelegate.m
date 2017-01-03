@@ -42,11 +42,52 @@
 - (void)applicationDidBecomeActive:(UIApplication *)application {
     // Restart any tasks that were paused (or not yet started) while the application was inactive. If the application was previously in the background, optionally refresh the user interface.
     
-    [XIProgressHUD showToast:@"didFinishLaunchingWithOptions" onView:self.window dismissAfter:2];
-    [XIProgressHUD showToast:@"applicationWillResignActive" onView:self.window dismissAfter:-1];
-    [XIProgressHUD showStatus:@"applicationDidEnterBackground" onView:self.window];
-    [XIProgressHUD showStatus:@"applicationWillEnterForeground" onView:self.window];
-    [XIProgressHUD showToast:@"applicationWillTerminate" onView:self.window dismissAfter:1.5];
+//    [XIProgressHUD showToast:@"didFinishLaunchingWithOptions" onView:self.window dismissAfter:2];
+//    [XIProgressHUD showToast:@"applicationWillResignActive" onView:self.window dismissAfter:-1];
+//    [XIProgressHUD showStatus:@"applicationDidEnterBackground" onView:self.window];
+//    [XIProgressHUD showStatus:@"applicationWillEnterForeground" onView:self.window];
+//    [XIProgressHUD showToast:@"applicationWillTerminate" onView:self.window dismissAfter:1.5];
+    
+    [XIProgressHUD showProgressHUDOnView:self.window
+                            toastGravity:ToastGravityTop
+                                  status:@"applicationDidBecomeActive1"
+                                   style:XIProgressHUDStyleToast
+                            dismissAfter:1.5];
+    [XIProgressHUD showProgressHUDOnView:self.window
+                            toastGravity:ToastGravityCenter
+                                  status:@"applicationDidBecomeActive2"
+                                   style:XIProgressHUDStyleToast
+                            dismissAfter:1.5];
+    [XIProgressHUD showProgressHUDOnView:self.window
+                            toastGravity:ToastGravityTop
+                                  status:@"applicationDidBecomeActive3"
+                                   style:XIProgressHUDStyleToast
+                            dismissAfter:1.5];
+    
+    [XIProgressHUD showProgressHUDOnView:self.window
+                            toastGravity:ToastGravityTop
+                                  status:@"applicationDidBecomeActive4"
+                                   style:XIProgressHUDStyleToast
+                            dismissAfter:-1];
+    
+    [XIProgressHUD showProgressHUDOnView:self.window
+                            toastGravity:ToastGravityTop
+                                  status:@"applicationDidBecomeActive5-3"
+                                   style:XIProgressHUDStyleToast
+                            dismissAfter:3];
+    
+    [XIProgressHUD showToast:@"applicationDidBecomeActive6"
+                toastGravity:ToastGravityCenter
+                      onView:self.window
+                dismissAfter:-1];
+    
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        
+        [XIProgressHUD showToast:@"applicationDidBecomeActive7"
+                    toastGravity:ToastGravityTop
+                          onView:self.window
+                    dismissAfter:2];
+    });
 }
 
 

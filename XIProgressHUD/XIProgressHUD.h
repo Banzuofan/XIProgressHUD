@@ -13,6 +13,11 @@ typedef NS_ENUM(NSUInteger, XIProgressHUDStyle) {
     XIProgressHUDStyleToast
 };
 
+typedef NS_ENUM(NSUInteger, XIToastGravity) {
+    ToastGravityTop,
+    ToastGravityCenter
+};
+
 @interface XIProgressHUD : UIView
 
 /**
@@ -21,6 +26,12 @@ typedef NS_ENUM(NSUInteger, XIProgressHUDStyle) {
  * @param dismissAfter if the value of dismissAfter is negative , XIProgressHUD view would be on aView for ever.
  */
 + (void)showProgressHUDOnView:(UIView *)aView
+                 toastGravity:(XIToastGravity)toastGravity
+                       status:(NSString *)status
+                        style:(XIProgressHUDStyle)style
+                 dismissAfter:(NSTimeInterval)dismissAfter;
+
++ (void)showProgressHUDOnView:(UIView *)aView
                        status:(NSString *)status
                         style:(XIProgressHUDStyle)style
                  dismissAfter:(NSTimeInterval)dismissAfter;
@@ -28,8 +39,12 @@ typedef NS_ENUM(NSUInteger, XIProgressHUDStyle) {
 + (void)showStatus:(NSString *)status onView:(UIView *)aView;
 + (void)showToast:(NSString *)message onView:(UIView *)aView dismissAfter:(NSTimeInterval)dismissAfter;
 
++ (void)showToast:(NSString *)message toastGravity:(XIToastGravity)toastGravity onView:(UIView *)aView dismissAfter:(NSTimeInterval)dismissAfter;
+
 /**
  * Remove the pending message in queue and remove the visible on aView.
  */
 + (void)dismissVisibleProgressHUDsOnView:(UIView *)aView animated:(BOOL)animated;
+
++ (void)clears;
 @end

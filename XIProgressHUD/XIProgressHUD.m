@@ -9,21 +9,25 @@
 #import "XIProgressHUD.h"
 #import "OCInsetLabelView.h"
 
-#define kDefaultBackgroundCornerRadius 6.0
+#define kDefaultBackgroundCornerRadius 8.0
 #define kDefaultPreferredMaxLayoutWidth 280.0
 #define kAppearAnimationDuration 0.25
-#define kDisappearAnimationDuration 0.15
+#define kDisappearAnimationDuration 0.20
 #define LoadingWithTextMargin 15
 #define LoadingWithTextSpacer 2
 #define ProgressHUDLoadingMinLen 90
 #define ProgressHUDLoadingWithTextMinLen 120
 #define ProgressHUDToastMinLen 120
+#define kToastGravityTopMargin 64
+#define kToastGravityAnimatedTopMargin 94
+#define kDefaultDamping 0.8
+#define kDefaultSpringVelocity 20
 
-
-@interface XIProgressHUDQueue : NSObject
+@interface __ProgressHUDQueue : NSObject
 @property(nonatomic, weak) XIProgressHUD *currentProgressHUD;
 @property(nonatomic, assign, getter=isAnimating) BOOL animating;
 + (instancetype)sharedQueue;
+- (BOOL)isEmpty;
 - (BOOL)contains:(UIView *)aView;
 - (UIView *)dequeue;
 - (void)enqueue:(UIView *)aView;
@@ -37,6 +41,7 @@
     UIActivityIndicatorView *indicatorView;
 }
 @property(nonatomic) NSTimeInterval dismissAfter;
+@property(nonatomic) XIToastGravity toastGravity;
 @property(nonatomic) XIProgressHUDStyle style;
 @end
 
@@ -177,61 +182,100 @@
 
 + (void)showProgressHUDInQueueOnView:(UIView *)aView
 {
-    if([XIProgressHUDQueue sharedQueue].currentProgressHUD){
+    if([__ProgressHUDQueue sharedQueue].currentProgressHUD && ![__ProgressHUDQueue sharedQueue].isEmpty){
         
-        XIProgressHUD *dismissingView = [XIProgressHUDQueue sharedQueue].currentProgressHUD;
-        [XIProgressHUDQueue sharedQueue].animating = YES;
+        XIProgressHUD *dismissingView = [__ProgressHUDQueue sharedQueue].currentProgressHUD;
+        [__ProgressHUDQueue sharedQueue].animating = YES;
         [UIView animateWithDuration:kDisappearAnimationDuration animations:^{
             dismissingView.alpha = 0;
         } completion:^(BOOL finished) {
-            [XIProgressHUDQueue sharedQueue].animating = NO;
+            [__ProgressHUDQueue sharedQueue].animating = NO;
             
-            [[XIProgressHUDQueue sharedQueue] remove:dismissingView];
+            [[__ProgressHUDQueue sharedQueue] remove:dismissingView];
             
             [dismissingView removeFromSuperview];
-            [XIProgressHUDQueue sharedQueue].currentProgressHUD = nil;
+            [__ProgressHUDQueue sharedQueue].currentProgressHUD = nil;
             
             [self showProgressHUDInQueueOnView:aView];
         }];
         return;
     }
     
-    XIProgressHUD *nextView = (XIProgressHUD *)[[XIProgressHUDQueue sharedQueue] dequeue];
+    XIProgressHUD *nextView = (XIProgressHUD *)[[__ProgressHUDQueue sharedQueue] dequeue];
     if(nextView){
         [aView addSubview:nextView];
         nextView.translatesAutoresizingMaskIntoConstraints = NO;
-        [aView addConstraints:@[[NSLayoutConstraint constraintWithItem:nextView
-                                                             attribute:NSLayoutAttributeCenterX
-                                                             relatedBy:NSLayoutRelationEqual
-                                                                toItem:aView
-                                                             attribute:NSLayoutAttributeCenterX
-                                                            multiplier:1
-                                                              constant:0],
-                                [NSLayoutConstraint constraintWithItem:nextView
-                                                             attribute:NSLayoutAttributeCenterY
-                                                             relatedBy:NSLayoutRelationEqual
-                                                                toItem:aView
-                                                             attribute:NSLayoutAttributeCenterY
-                                                            multiplier:1
-                                                              constant:0]]];
+        NSLayoutConstraint *topMarginConstraint = nil;
+        if(nextView.style==XIProgressHUDStyleToast && nextView.toastGravity==ToastGravityTop){
+            topMarginConstraint = [NSLayoutConstraint constraintWithItem:nextView
+                                                               attribute:NSLayoutAttributeTop
+                                                               relatedBy:NSLayoutRelationEqual
+                                                                  toItem:aView
+                                                               attribute:NSLayoutAttributeTop
+                                                              multiplier:1
+                                                                constant:kToastGravityTopMargin];
+            
+            [aView addConstraints:@[[NSLayoutConstraint constraintWithItem:nextView
+                                                                 attribute:NSLayoutAttributeCenterX
+                                                                 relatedBy:NSLayoutRelationEqual
+                                                                    toItem:aView
+                                                                 attribute:NSLayoutAttributeCenterX
+                                                                multiplier:1
+                                                                  constant:0],topMarginConstraint]];
+        }
+        else{
+            [aView addConstraints:@[[NSLayoutConstraint constraintWithItem:nextView
+                                                                 attribute:NSLayoutAttributeCenterX
+                                                                 relatedBy:NSLayoutRelationEqual
+                                                                    toItem:aView
+                                                                 attribute:NSLayoutAttributeCenterX
+                                                                multiplier:1
+                                                                  constant:0],
+                                    [NSLayoutConstraint constraintWithItem:nextView
+                                                                 attribute:NSLayoutAttributeCenterY
+                                                                 relatedBy:NSLayoutRelationEqual
+                                                                    toItem:aView
+                                                                 attribute:NSLayoutAttributeCenterY
+                                                                multiplier:1
+                                                                  constant:0]]];
+        }
+        
         nextView.alpha = 0;
-        [XIProgressHUDQueue sharedQueue].animating = YES;
-        [UIView animateWithDuration:kAppearAnimationDuration animations:^{
+        [__ProgressHUDQueue sharedQueue].animating = YES;
+        
+        // Ensures that all pending layout operations have been completed
+        [aView layoutIfNeeded];
+        
+        [UIView animateWithDuration:kAppearAnimationDuration delay:0 usingSpringWithDamping:kDefaultDamping initialSpringVelocity:kDefaultSpringVelocity options:UIViewAnimationOptionCurveEaseInOut animations:^{
             nextView.alpha = 1;
+            
+            if(topMarginConstraint){
+                topMarginConstraint.constant = kToastGravityAnimatedTopMargin;
+                [aView layoutIfNeeded];
+            }
         } completion:^(BOOL finished) {
-            [XIProgressHUDQueue sharedQueue].animating = NO;
+            [__ProgressHUDQueue sharedQueue].animating = NO;
             if(nextView.dismissAfter<0){
-                [XIProgressHUDQueue sharedQueue].currentProgressHUD = nextView;
+                
+                [__ProgressHUDQueue sharedQueue].currentProgressHUD = nextView;
+                [[__ProgressHUDQueue sharedQueue] remove:nextView];// remove currentProgressHUD from queue
+                
                 [self showProgressHUDInQueueOnView:aView];
             }
             else{
-                [XIProgressHUDQueue sharedQueue].animating = YES;
+                [__ProgressHUDQueue sharedQueue].animating = YES;
                 [UIView animateWithDuration:kDisappearAnimationDuration delay:nextView.dismissAfter options:UIViewAnimationOptionCurveEaseInOut animations:^{
                     nextView.alpha = 0;
+                    
+                    if(topMarginConstraint){
+                        topMarginConstraint.constant = kToastGravityTopMargin;
+                        [aView layoutIfNeeded];
+                    }
+                    
                 } completion:^(BOOL finished) {
-                    [XIProgressHUDQueue sharedQueue].animating = NO;
+                    [__ProgressHUDQueue sharedQueue].animating = NO;
                     [nextView removeFromSuperview];
-                    [[XIProgressHUDQueue sharedQueue] remove:nextView];
+                    [[__ProgressHUDQueue sharedQueue] remove:nextView];
                     [self showProgressHUDInQueueOnView:aView];
                 }];
             }
@@ -242,32 +286,35 @@
     }
 }
 
+
 + (void)showProgressHUDOnView:(UIView *)aView
+                 toastGravity:(XIToastGravity)toastGravity
                        status:(NSString *)status
                         style:(XIProgressHUDStyle)style
                  dismissAfter:(NSTimeInterval)dismissAfter
 {
-    
     XIProgressHUD *view = [[XIProgressHUD alloc] initWithFrame:CGRectZero text:status style:style];
     view.dismissAfter = dismissAfter;
+    view.toastGravity = toastGravity;
+    view.style = style;
     
-    if([XIProgressHUDQueue sharedQueue].currentProgressHUD){
+    if([__ProgressHUDQueue sharedQueue].currentProgressHUD){
         
-        if(![[XIProgressHUDQueue sharedQueue] contains:view]){
-            [[XIProgressHUDQueue sharedQueue] enqueue:view];
+        if(![[__ProgressHUDQueue sharedQueue] contains:view]){
+            [[__ProgressHUDQueue sharedQueue] enqueue:view];
         }
         
-        XIProgressHUD *dismissingView = [XIProgressHUDQueue sharedQueue].currentProgressHUD;
-        [XIProgressHUDQueue sharedQueue].animating = YES;
+        XIProgressHUD *dismissingView = [__ProgressHUDQueue sharedQueue].currentProgressHUD;
+        [__ProgressHUDQueue sharedQueue].animating = YES;
         [UIView animateWithDuration:kDisappearAnimationDuration animations:^{
             dismissingView.alpha = 0;
         } completion:^(BOOL finished) {
-            [XIProgressHUDQueue sharedQueue].animating = NO;
+            [__ProgressHUDQueue sharedQueue].animating = NO;
             
-            [[XIProgressHUDQueue sharedQueue] remove:dismissingView];
+            [[__ProgressHUDQueue sharedQueue] remove:dismissingView];
             
             [dismissingView removeFromSuperview];
-            [XIProgressHUDQueue sharedQueue].currentProgressHUD = nil;
+            [__ProgressHUDQueue sharedQueue].currentProgressHUD = nil;
             
             [self showProgressHUDInQueueOnView:aView];
         }];
@@ -275,52 +322,103 @@
         return;
     }
     
-    if([XIProgressHUDQueue sharedQueue].isAnimating){
+    if([__ProgressHUDQueue sharedQueue].isAnimating){
         
-        if(![[XIProgressHUDQueue sharedQueue] contains:view]){
-            [[XIProgressHUDQueue sharedQueue] enqueue:view];
+        if(![[__ProgressHUDQueue sharedQueue] contains:view]){
+            [[__ProgressHUDQueue sharedQueue] enqueue:view];
         }
         return;
     }
     
     [aView addSubview:view];
     view.translatesAutoresizingMaskIntoConstraints = NO;
-    [aView addConstraints:@[[NSLayoutConstraint constraintWithItem:view
-                                                         attribute:NSLayoutAttributeCenterX
-                                                         relatedBy:NSLayoutRelationEqual
-                                                            toItem:aView
-                                                         attribute:NSLayoutAttributeCenterX
-                                                        multiplier:1
-                                                          constant:0],
-                            [NSLayoutConstraint constraintWithItem:view
-                                                         attribute:NSLayoutAttributeCenterY
-                                                         relatedBy:NSLayoutRelationEqual
-                                                            toItem:aView
-                                                         attribute:NSLayoutAttributeCenterY
-                                                        multiplier:1
-                                                          constant:0]]];
     
-    [XIProgressHUDQueue sharedQueue].animating = YES;
+    NSLayoutConstraint *topMarginConstraint = nil;
+    if(style==XIProgressHUDStyleToast && toastGravity==ToastGravityTop){
+        
+        topMarginConstraint = [NSLayoutConstraint constraintWithItem:view
+                                                           attribute:NSLayoutAttributeTop
+                                                           relatedBy:NSLayoutRelationEqual
+                                                              toItem:aView
+                                                           attribute:NSLayoutAttributeTop
+                                                          multiplier:1
+                                                            constant:kToastGravityTopMargin];
+        
+        [aView addConstraints:@[[NSLayoutConstraint constraintWithItem:view
+                                                             attribute:NSLayoutAttributeCenterX
+                                                             relatedBy:NSLayoutRelationEqual
+                                                                toItem:aView
+                                                             attribute:NSLayoutAttributeCenterX
+                                                            multiplier:1
+                                                              constant:0],topMarginConstraint]];
+    }
+    else{
+        [aView addConstraints:@[[NSLayoutConstraint constraintWithItem:view
+                                                             attribute:NSLayoutAttributeCenterX
+                                                             relatedBy:NSLayoutRelationEqual
+                                                                toItem:aView
+                                                             attribute:NSLayoutAttributeCenterX
+                                                            multiplier:1
+                                                              constant:0],
+                                [NSLayoutConstraint constraintWithItem:view
+                                                             attribute:NSLayoutAttributeCenterY
+                                                             relatedBy:NSLayoutRelationEqual
+                                                                toItem:aView
+                                                             attribute:NSLayoutAttributeCenterY
+                                                            multiplier:1
+                                                              constant:0]]];
+    }
+    
+    [__ProgressHUDQueue sharedQueue].animating = YES;
     view.alpha = 0;
-    [UIView animateWithDuration:kAppearAnimationDuration animations:^{
+    // Ensures that all pending layout operations have been completed
+    [aView layoutIfNeeded];
+    
+    [UIView animateWithDuration:kAppearAnimationDuration delay:0 usingSpringWithDamping:kDefaultDamping initialSpringVelocity:kDefaultSpringVelocity options:UIViewAnimationOptionCurveEaseInOut animations:^{
         view.alpha = 1;
+        
+        if(topMarginConstraint){
+            topMarginConstraint.constant = kToastGravityAnimatedTopMargin;
+            [aView layoutIfNeeded];
+        }
     } completion:^(BOOL finished) {
-        [XIProgressHUDQueue sharedQueue].animating = NO;
+        [__ProgressHUDQueue sharedQueue].animating = NO;
         if(dismissAfter<0){
-            [XIProgressHUDQueue sharedQueue].currentProgressHUD = view;
+            [__ProgressHUDQueue sharedQueue].currentProgressHUD = view;
+            [[__ProgressHUDQueue sharedQueue] remove:view];// remove currentProgressHUD from queue
+            
             [self showProgressHUDInQueueOnView:aView];
         }
         else{
-            [XIProgressHUDQueue sharedQueue].animating = YES;
+            [__ProgressHUDQueue sharedQueue].animating = YES;
+            
             [UIView animateWithDuration:kDisappearAnimationDuration delay:view.dismissAfter options:UIViewAnimationOptionCurveEaseInOut animations:^{
-                view.alpha = 0;
+                view.alpha = 0.0;
+                
+                if(topMarginConstraint){
+                    topMarginConstraint.constant = kToastGravityTopMargin;
+                    [aView layoutIfNeeded];
+                }
+                
             } completion:^(BOOL finished) {
-                [XIProgressHUDQueue sharedQueue].animating = NO;
+                [__ProgressHUDQueue sharedQueue].animating = NO;
                 [view removeFromSuperview];
                 [self showProgressHUDInQueueOnView:aView];
             }];
         }
     }];
+}
+
++ (void)showProgressHUDOnView:(UIView *)aView
+                       status:(NSString *)status
+                        style:(XIProgressHUDStyle)style
+                 dismissAfter:(NSTimeInterval)dismissAfter
+{
+    [XIProgressHUD showProgressHUDOnView:aView
+                            toastGravity:ToastGravityCenter
+                                  status:status
+                                   style:style
+                            dismissAfter:dismissAfter];
 }
 
 + (void)showStatus:(NSString *)status onView:(UIView *)aView
@@ -333,9 +431,18 @@
     [self showProgressHUDOnView:aView status:message style:XIProgressHUDStyleToast dismissAfter:dismissAfter];
 }
 
++ (void)showToast:(NSString *)message toastGravity:(XIToastGravity)toastGravity onView:(UIView *)aView dismissAfter:(NSTimeInterval)dismissAfter
+{
+    [XIProgressHUD showProgressHUDOnView:aView
+                            toastGravity:toastGravity
+                                  status:message
+                                   style:XIProgressHUDStyleToast
+                            dismissAfter:dismissAfter];
+}
+
 + (void)dismissVisibleProgressHUDsOnView:(UIView *)aView animated:(BOOL)animated
 {
-    [[XIProgressHUDQueue sharedQueue] removeAll];
+    [[__ProgressHUDQueue sharedQueue] removeAll];
     
     __block XIProgressHUD *viewToRemove = nil;
     for(UIView *subview in aView.subviews){
@@ -362,6 +469,34 @@
     }
 }
 
++ (void)clears
+{
+    XIProgressHUD *view = (XIProgressHUD *)[[__ProgressHUDQueue sharedQueue] dequeue];
+    while (view) {
+        [XIProgressHUD dismissVisibleProgressHUDsOnView:view.superview animated:NO];
+        [[__ProgressHUDQueue sharedQueue] remove:view];
+        
+        view = (XIProgressHUD *)[[__ProgressHUDQueue sharedQueue] dequeue];
+    }
+    
+    if([__ProgressHUDQueue sharedQueue].currentProgressHUD){
+        [[__ProgressHUDQueue sharedQueue].currentProgressHUD removeFromSuperview];
+        [__ProgressHUDQueue sharedQueue].currentProgressHUD = nil;
+    }
+}
+
+- (void)layoutSubviews
+{
+    [super layoutSubviews];
+    
+    self.layer.cornerRadius = kDefaultBackgroundCornerRadius;
+    self.layer.shadowPath = [UIBezierPath bezierPathWithRoundedRect:self.bounds cornerRadius:kDefaultBackgroundCornerRadius].CGPath;
+    self.layer.shadowColor = [UIColor blackColor].CGColor;
+    self.layer.shadowOffset = CGSizeMake(0, 0);
+    self.layer.shadowRadius = 3.0;
+    self.layer.shadowOpacity = 0.5;
+}
+
 - (void)drawRect:(CGRect)rect
 {
     UIBezierPath *path = [UIBezierPath bezierPathWithRoundedRect:rect cornerRadius:kDefaultBackgroundCornerRadius];
@@ -371,16 +506,21 @@
 
 @end
 
-@implementation XIProgressHUDQueue
+@implementation __ProgressHUDQueue
 {
     NSMutableArray *_queuePool;
 }
 
+- (void)dealloc
+{
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
 + (instancetype)sharedQueue{
-    static XIProgressHUDQueue *instance = nil;
+    static __ProgressHUDQueue *instance = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        instance = [[XIProgressHUDQueue alloc] init];
+        instance = [[__ProgressHUDQueue alloc] init];
     });
     return instance;
 }
@@ -389,8 +529,23 @@
 {
     if(self=[super init]){
         _queuePool = @[].mutableCopy;
+        
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(removeAllPendingViews)
+                                                     name:UIApplicationDidEnterBackgroundNotification
+                                                   object:nil];
     }
     return self;
+}
+
+- (void)removeAllPendingViews
+{
+    [XIProgressHUD clears];
+}
+
+- (BOOL)isEmpty
+{
+    return _queuePool.count==0;
 }
 
 - (BOOL)contains:(UIView *)aView
